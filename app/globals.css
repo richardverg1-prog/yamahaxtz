@@ -202,6 +202,88 @@ body {
 .tab-btn { flex-shrink: 0; padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--muted); transition: background .15s, color .15s; }
 .tab-btn.active { background: var(--surface); color: var(--text); }
 
+/* ── NAV EXTRAS ───────────────────────────────────────── */
+.nav-brand {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -.01em;
+}
+.nav-logout {
+  color: var(--muted);
+  cursor: pointer;
+}
+.nav-logout:hover { color: var(--danger); }
+
+/* ── DESKTOP LAYOUT ───────────────────────────────────── */
+@media (min-width: 768px) {
+  .app-shell {
+    padding-bottom: 0;
+    padding-left: 240px;
+  }
+  .page { max-width: 900px; }
+  .page-header { max-width: 900px; }
+
+  .bottom-nav {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: auto;
+    width: 240px;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    padding-bottom: 0;
+    padding-top: 8px;
+    gap: 2px;
+  }
+
+  .nav-brand {
+    display: flex;
+    padding: 16px 20px 20px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  .nav-tab {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 11px 20px;
+    font-size: 14px;
+    gap: 12px;
+    border-radius: 0;
+    letter-spacing: 0;
+  }
+  .nav-tab svg { width: 20px; height: 20px; }
+
+  .nav-logout {
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: auto;
+  }
+
+  .fab {
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal-overlay { align-items: center; }
+  .modal-sheet {
+    border-radius: 20px;
+    max-width: 520px;
+    max-height: 90dvh;
+    margin: 0 auto;
+    padding: 0 24px 28px;
+  }
+}
+
 /* ── UTILS ────────────────────────────────────────────── */
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }

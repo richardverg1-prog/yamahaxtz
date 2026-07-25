@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { storage } from '@/lib/storage';
-import type { AppSettings, MaintenanceEntry, FuelEntry, TripLog } from '@/lib/types';
-import { AlertTriangle, Wrench, Droplets, ChevronRight, Check, Bell, X, RotateCcw } from 'lucide-react';
+import type { AppSettings, MaintenanceEntry, FuelEntry } from '@/lib/types';
+import { AlertTriangle, Wrench, Droplets, ChevronRight, Check, Bell, X } from 'lucide-react';
 import Link from 'next/link';
 
 function fmt(n: number) { return n.toLocaleString('pt-BR'); }
@@ -38,7 +38,8 @@ function computeNotifs(s: AppSettings): Notif[] {
     out.push({ id: 'filter', urgency: 'warn', icon: '🔵', title: 'Filtro de óleo — trocar em breve', detail: `Faltam ${fmt(filterLeft)} km`, at_km: s.lastFilterChangeMileage + s.filterChangeInterval });
   }
 
-  const nextChain = Math.ceil((km + 1) / 500) * 500;
+  const lastChain = s.lastChainCheckMileage || s.lastOilChangeMileage;
+  const nextChain = lastChain + s.chainInterval;
   const chainLeft = nextChain - km;
   if (chainLeft <= 50) {
     out.push({ id: 'chain', urgency: 'warn', icon: '⛓️', title: 'Corrente — verificar agora', detail: `Próxima verificação em ${fmt(nextChain)} km (faltam ${fmt(chainLeft)} km)`, at_km: nextChain });
@@ -136,7 +137,6 @@ export default function Dashboard() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [maintenance, setMaintenance] = useState<MaintenanceEntry[]>([]);
   const [fuel, setFuel] = useState<FuelEntry[]>([]);
-  const [trips, setTrips] = useState<TripLog[]>([]);
   const [editing, setEditing] = useState(false);
   const [mileageInput, setMileageInput] = useState('');
   const [showNotifs, setShowNotifs] = useState(false);
@@ -145,7 +145,6 @@ export default function Dashboard() {
     setSettings(storage.getSettings());
     setMaintenance(storage.getMaintenance().sort((a, b) => b.date.localeCompare(a.date)));
     setFuel(storage.getFuel().sort((a, b) => b.date.localeCompare(a.date)));
-    setTrips(storage.getTrips());
   }, []);
 
   if (!settings) return null;
@@ -164,7 +163,8 @@ export default function Dashboard() {
 
   const totalMaintCost = maintenance.reduce((s, e) => s + e.totalCost, 0);
   const totalFuelCost = fuel.reduce((s, e) => s + e.totalCost, 0);
-  const totalInvested = totalMaintCost + totalFuelCost;
+  const totalMultas = storage.getDocuments().filter(d => d.type === 'multa').reduce((s, d) => s + (d.amount ?? 0), 0);
+  const totalInvested = totalMaintCost + totalFuelCost + totalMultas;
 
   const validKmL = fuel.filter(f => f.kmL !== null && f.kmL! > 0);
   const avgKmL = validKmL.length ? validKmL.reduce((s, f) => s + f.kmL!, 0) / validKmL.length : null;
@@ -174,20 +174,6 @@ export default function Dashboard() {
   const firstKm = allMileages.length > 0 ? Math.min(...allMileages) : km;
   const kmTracked = Math.max(0, km - firstKm);
   const custoPorKm = kmTracked > 10 ? totalInvested / kmTracked : null;
-
-  // Trip1 and Trip2
-  const lastTrip1 = [...trips].filter(t => t.trip === 1).sort((a, b) => b.mileage - a.mileage)[0];
-  const lastTrip2 = [...trips].filter(t => t.trip === 2).sort((a, b) => b.mileage - a.mileage)[0];
-  const trip1Km = km - (lastTrip1?.mileage ?? settings.lastOilChangeMileage);
-  const trip2Km = km - (lastTrip2?.mileage ?? (fuel.length ? Math.min(...fuel.map(e => e.mileage)) : km));
-
-  function resetTrip(tripNum: 1 | 2) {
-    const today = new Date().toISOString().slice(0, 10);
-    const entry: TripLog = { id: Date.now().toString(36), trip: tripNum, date: today, mileage: km };
-    const updated = [...trips, entry];
-    storage.setTrips(updated);
-    setTrips(updated);
-  }
 
   const alerts: { type: 'danger' | 'warn' | 'ok'; msg: string }[] = [];
   if (oilPct >= 1) alerts.push({ type: 'danger', msg: `Troca de óleo vencida! (${fmt(oilKm)} km sem trocar)` });
@@ -207,14 +193,15 @@ export default function Dashboard() {
   const oilColor = oilPct >= 1 ? 'var(--danger)' : oilPct >= 0.8 ? 'var(--warn)' : 'var(--success)';
   const filterColor = filterPct >= 1 ? 'var(--danger)' : filterPct >= 0.8 ? 'var(--warn)' : 'var(--accent)';
 
-  const nextChain500 = Math.ceil((km + 1) / 500) * 500;
-  const chainLeft = nextChain500 - km;
+  const lastChainKm = settings.lastChainCheckMileage || settings.lastOilChangeMileage;
+  const nextChainKm = lastChainKm + settings.chainInterval;
+  const chainLeft = nextChainKm - km;
   const sparkNext = Math.ceil((km + 1) / 5000) * 5000;
   const airFilterNext = sparkNext;
   const brakeNext = settings.lastOilChangeMileage + 3000;
 
   const schedule = [
-    { emoji: '⛓️', label: 'Corrente (verificar/lubrificar)', km: nextChain500, left: chainLeft, badge: chainLeft <= 50 ? 'warn' : 'muted' as string },
+    { emoji: '⛓️', label: 'Corrente (verificar/lubrificar)', km: nextChainKm, left: chainLeft, badge: chainLeft <= 50 ? 'warn' : 'muted' as string },
     { emoji: '🛢️', label: 'Troca de óleo', km: settings.lastOilChangeMileage + settings.oilChangeInterval, left: oilRemaining, badge: oilPct >= 1 ? 'danger' : oilPct >= 0.8 ? 'warn' : 'muted' as string },
     { emoji: '🔵', label: 'Filtro de óleo', km: settings.lastFilterChangeMileage + settings.filterChangeInterval, left: filterRemaining, badge: filterPct >= 1 ? 'danger' : filterPct >= 0.8 ? 'warn' : 'muted' as string },
     { emoji: '🔴', label: 'Freios (desgaste/nível DOT4)', km: brakeNext, left: brakeNext - km, badge: brakeNext <= km ? 'warn' : 'muted' as string },
@@ -310,35 +297,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Trip Meters */}
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-pad">
-            <div className="card-title">Hodômetros parciais</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {([1, 2] as const).map(tripNum => {
-                const tripKm = tripNum === 1 ? trip1Km : trip2Km;
-                const label = tripNum === 1 ? 'Trip 1 — Óleo' : 'Trip 2 — Consumo';
-                return (
-                  <div key={tripNum} style={{ background: 'var(--surface2)', borderRadius: 12, padding: 12 }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
-                      {fmt(Math.max(0, tripKm))}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>km</div>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ width: '100%', gap: 4 }}
-                      onClick={() => { if (confirm(`Zerar Trip ${tripNum}?`)) resetTrip(tripNum); }}
-                    >
-                      <RotateCcw size={12} /> Zerar
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
         {/* Vida útil */}
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="card-pad">
@@ -388,7 +346,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                Próxima verificação em {fmt(nextChain500)} km (faltam {fmt(chainLeft)} km) · folga ideal: 15–25 mm
+                Próxima verificação em {fmt(nextChainKm)} km (faltam {fmt(Math.max(0, chainLeft))} km) · folga ideal: 15–25 mm
               </div>
             </div>
           </div>

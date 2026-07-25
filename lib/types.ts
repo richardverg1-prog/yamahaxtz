@@ -55,11 +55,13 @@ export interface TireEntry {
 
 export interface MotoDocument {
   id: string;
-  type: 'crlv' | 'seguro' | 'ipva' | 'outro';
+  type: 'crlv' | 'seguro' | 'multa' | 'outro';
   label: string;
-  expiry: string;
-  number: string;
-  notes: string;
+  expiry?: string;
+  number?: string;
+  amount?: number;
+  status?: 'pago' | 'pendente';
+  notes?: string;
 }
 
 export interface WishlistItem {
@@ -67,6 +69,7 @@ export interface WishlistItem {
   description: string;
   priority: 'alta' | 'media' | 'baixa';
   estimatedPrice: number;
+  url?: string;
   done: boolean;
 }
 
@@ -93,9 +96,28 @@ export interface AppSettings {
   oilChangeInterval: number;
   filterChangeInterval: number;
   chainInterval: number;
+  lastChainCheckMileage: number;
   bikeName: string;
   bikeYear: string;
   bikeColor: string;
   anthropicApiKey?: string;
   tires?: { dianteiro?: TireEntry; traseiro?: TireEntry };
+}
+
+export interface User {
+  id: string;
+  username: string;
+  passwordHash: string;
+  role: 'admin' | 'user';
+  displayName: string;
+  bikeName: string;
+  bikeYear: string;
+  bikeColor: string;
+  createdAt: string;
+}
+
+export interface Session {
+  userId: string;
+  role: 'admin' | 'user';
+  expiresAt: string;
 }

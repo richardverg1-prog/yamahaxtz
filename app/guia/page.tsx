@@ -5,7 +5,7 @@ import { storage } from '@/lib/storage';
 import type { ChecklistRun } from '@/lib/types';
 import { ChevronDown, ChevronUp, CheckSquare, Square, History, Save } from 'lucide-react';
 
-const TABS = ['Motor', 'Óleo', 'Ignição', 'Pneus', 'Torques', 'Elétrica', 'Periódica', 'Dicas', 'Checklist'] as const;
+const TABS = ['Checklist', 'Dicas', 'Motor', 'Óleo', 'Ignição', 'Pneus', 'Torques', 'Elétrica', 'Periódica'] as const;
 type Tab = typeof TABS[number];
 
 const TCLOCS = [
@@ -179,7 +179,7 @@ function ChecklistSection({ section, checks, onChange }: {
 }
 
 export default function Guia() {
-  const [tab, setTab] = useState<Tab>('Motor');
+  const [tab, setTab] = useState<Tab>('Checklist');
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [runKm, setRunKm] = useState('');
   const [savedRuns, setSavedRuns] = useState<ChecklistRun[]>([]);

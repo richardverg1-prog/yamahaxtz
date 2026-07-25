@@ -1,17 +1,20 @@
 'use client';
 import type { MaintenanceEntry, FuelEntry, GalleryPhoto, AppSettings, MotoDocument, WishlistItem, TripLog, ChecklistRun } from './types';
 
-const K = {
-  MAINTENANCE: 'xtz_maintenance',
-  FUEL: 'xtz_fuel',
-  GALLERY: 'xtz_gallery',
-  SETTINGS: 'xtz_settings',
-  DOCUMENTS: 'xtz_documents',
-  WISHLIST: 'xtz_wishlist',
-  TRIPS: 'xtz_trips',
-  CHECKLISTS: 'xtz_checklists',
-  SEEDED: 'xtz_seeded_v3',
-};
+function getCurrentUserId(): string {
+  if (typeof window === 'undefined') return 'default';
+  try {
+    const raw = localStorage.getItem('xtz_auth_session');
+    if (!raw) return 'default';
+    const s = JSON.parse(raw);
+    if (new Date(s.expiresAt) < new Date()) return 'default';
+    return s.userId;
+  } catch { return 'default'; }
+}
+
+function uk(base: string): string {
+  return `xtz_u_${getCurrentUserId()}_${base}`;
+}
 
 const INIT_MAINTENANCE: MaintenanceEntry[] = [
   {
@@ -55,7 +58,7 @@ const INIT_FUEL: FuelEntry[] = [
     totalCost: 60.16,
     pricePerLiter: 6.84,
     isFull: true,
-    notes: 'Trip2 zerado — início do controle de consumo.',
+    notes: 'Início do controle de consumo.',
     kmL: null,
   },
 ];
@@ -68,15 +71,11 @@ const INIT_SETTINGS: AppSettings = {
   oilChangeInterval: 1500,
   filterChangeInterval: 3000,
   chainInterval: 500,
+  lastChainCheckMileage: 1350,
   bikeName: 'XTZ 250X',
   bikeYear: '2008',
   bikeColor: 'Preta',
 };
-
-const INIT_TRIPS: TripLog[] = [
-  { id: 'trip_001', trip: 1, date: '2026-07-24', mileage: 1350 },
-  { id: 'trip_002', trip: 2, date: '2026-07-24', mileage: 1357 },
-];
 
 function get<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
@@ -90,55 +89,84 @@ function set<T>(key: string, value: T): void {
 }
 
 export function ensureSeeded() {
-  if (get(K.SEEDED, false)) return;
-  set(K.MAINTENANCE, INIT_MAINTENANCE);
-  set(K.FUEL, INIT_FUEL);
-  set(K.GALLERY, []);
-  set(K.SETTINGS, INIT_SETTINGS);
-  set(K.DOCUMENTS, []);
-  set(K.WISHLIST, []);
-  set(K.TRIPS, INIT_TRIPS);
-  set(K.CHECKLISTS, []);
-  set(K.SEEDED, true);
+  const seedKey = uk('seeded_v4');
+  if (get(seedKey, false)) return;
+
+  // Migrate from old non-namespaced keys (only for admin user with existing data)
+  const oldMaint = localStorage.getItem('xtz_maintenance');
+  if (oldMaint && oldMaint !== '[]') {
+    const keys = ['maintenance', 'fuel', 'gallery', 'settings', 'documents', 'wishlist', 'trips', 'checklists'];
+    const oldKeys: Record<string, string> = {
+      maintenance: 'xtz_maintenance', fuel: 'xtz_fuel', gallery: 'xtz_gallery',
+      settings: 'xtz_settings', documents: 'xtz_documents', wishlist: 'xtz_wishlist',
+      trips: 'xtz_trips', checklists: 'xtz_checklists',
+    };
+    keys.forEach(k => {
+      const old = localStorage.getItem(oldKeys[k]);
+      if (old) localStorage.setItem(uk(k), old);
+    });
+    // Patch settings to add lastChainCheckMileage if missing
+    const s: AppSettings = get(uk('settings'), INIT_SETTINGS);
+    if (!s.lastChainCheckMileage) {
+      set(uk('settings'), { ...s, lastChainCheckMileage: s.lastOilChangeMileage || 1350 });
+    }
+  } else {
+    // Fresh user seed
+    set(uk('maintenance'), INIT_MAINTENANCE);
+    set(uk('fuel'), INIT_FUEL);
+    set(uk('gallery'), []);
+    set(uk('settings'), INIT_SETTINGS);
+    set(uk('documents'), []);
+    set(uk('wishlist'), []);
+    set(uk('trips'), []);
+    set(uk('checklists'), []);
+  }
+
+  set(seedKey, true);
 }
 
 export const storage = {
-  getMaintenance: (): MaintenanceEntry[] => get(K.MAINTENANCE, []),
-  setMaintenance: (d: MaintenanceEntry[]) => set(K.MAINTENANCE, d),
+  getMaintenance: (): MaintenanceEntry[] => get(uk('maintenance'), []),
+  setMaintenance: (d: MaintenanceEntry[]) => set(uk('maintenance'), d),
 
-  getFuel: (): FuelEntry[] => get(K.FUEL, []),
-  setFuel: (d: FuelEntry[]) => set(K.FUEL, d),
+  getFuel: (): FuelEntry[] => get(uk('fuel'), []),
+  setFuel: (d: FuelEntry[]) => set(uk('fuel'), d),
 
-  getGallery: (): GalleryPhoto[] => get(K.GALLERY, []),
-  setGallery: (d: GalleryPhoto[]) => set(K.GALLERY, d),
+  getGallery: (): GalleryPhoto[] => get(uk('gallery'), []),
+  setGallery: (d: GalleryPhoto[]) => set(uk('gallery'), d),
 
-  getSettings: (): AppSettings => get(K.SETTINGS, INIT_SETTINGS),
-  setSettings: (d: AppSettings) => set(K.SETTINGS, d),
+  getSettings: (): AppSettings => {
+    const s = get(uk('settings'), INIT_SETTINGS);
+    // Backfill field added after initial seed
+    if (!s.lastChainCheckMileage) return { ...s, lastChainCheckMileage: s.lastOilChangeMileage || 1350 };
+    return s;
+  },
+  setSettings: (d: AppSettings) => set(uk('settings'), d),
   patchSettings: (p: Partial<AppSettings>) => {
-    set(K.SETTINGS, { ...get(K.SETTINGS, INIT_SETTINGS), ...p });
+    const cur = get(uk('settings'), INIT_SETTINGS);
+    set(uk('settings'), { ...cur, ...p });
   },
 
-  getDocuments: (): MotoDocument[] => get(K.DOCUMENTS, []),
-  setDocuments: (d: MotoDocument[]) => set(K.DOCUMENTS, d),
+  getDocuments: (): MotoDocument[] => get(uk('documents'), []),
+  setDocuments: (d: MotoDocument[]) => set(uk('documents'), d),
 
-  getWishlist: (): WishlistItem[] => get(K.WISHLIST, []),
-  setWishlist: (d: WishlistItem[]) => set(K.WISHLIST, d),
+  getWishlist: (): WishlistItem[] => get(uk('wishlist'), []),
+  setWishlist: (d: WishlistItem[]) => set(uk('wishlist'), d),
 
-  getTrips: (): TripLog[] => get(K.TRIPS, []),
-  setTrips: (d: TripLog[]) => set(K.TRIPS, d),
+  getTrips: (): TripLog[] => get(uk('trips'), []),
+  setTrips: (d: TripLog[]) => set(uk('trips'), d),
 
-  getChecklists: (): ChecklistRun[] => get(K.CHECKLISTS, []),
-  setChecklists: (d: ChecklistRun[]) => set(K.CHECKLISTS, d),
+  getChecklists: (): ChecklistRun[] => get(uk('checklists'), []),
+  setChecklists: (d: ChecklistRun[]) => set(uk('checklists'), d),
 
   clearAll: () => {
-    Object.values(K).forEach(k => {
-      if (typeof window !== 'undefined') localStorage.removeItem(k);
-    });
-    // also clear legacy seeds
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('xtz_seeded_v2');
-      localStorage.removeItem('xtz_seeded_v1');
-    }
+    if (typeof window === 'undefined') return;
+    const prefix = `xtz_u_${getCurrentUserId()}_`;
+    Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
+    // Also clear legacy keys
+    ['xtz_maintenance','xtz_fuel','xtz_gallery','xtz_settings','xtz_documents',
+     'xtz_wishlist','xtz_trips','xtz_checklists','xtz_seeded_v1','xtz_seeded_v2','xtz_seeded_v3']
+      .forEach(k => localStorage.removeItem(k));
   },
 };
 

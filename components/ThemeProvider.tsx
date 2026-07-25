@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { storage, ensureSeeded } from '@/lib/storage';
+import { storage } from '@/lib/storage';
 import type { Theme } from '@/lib/types';
 
 interface Ctx { theme: Theme; setTheme: (t: Theme) => void; }
@@ -10,7 +10,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark');
 
   useEffect(() => {
-    ensureSeeded();
     const t = storage.getSettings().theme;
     apply(t);
     setThemeState(t);
