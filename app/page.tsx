@@ -214,7 +214,7 @@ export default function Dashboard() {
 
   function saveKm() {
     const v = parseInt(mileageInput);
-    if (!v || v < (settings?.currentMileage ?? 0)) return;
+    if (!v || v <= 0) return;
     const updated = { ...settings!, currentMileage: v };
     storage.setSettings(updated);
     setSettings(updated);
