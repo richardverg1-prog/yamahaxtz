@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="110" fill="#0D0C08"/>
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#F5A623" stroke-width="8" opacity="0.3"/>
+  <circle cx="256" cy="256" r="185" fill="#111009"/>
+  <!-- Yamaha tuning fork symbol -->
+  <g fill="#F5A623">
+    <!-- Center circle -->
+    <circle cx="256" cy="256" r="28"/>
+    <!-- Three prongs radiating out at 120° each -->
+    <!-- Prong 1: top -->
+    <path d="M256 228 L248 140 Q256 120 264 140 Z"/>
+    <circle cx="256" cy="128" r="22"/>
+    <!-- Prong 2: bottom-left -->
+    <path d="M235 265 L155 315 Q140 330 150 342 Z"/>
+    <circle cx="138" cy="348" r="22"/>
+    <!-- Prong 3: bottom-right -->
+    <path d="M277 265 L357 315 Q372 330 362 342 Z"/>
+    <circle cx="374" cy="348" r="22"/>
+  </g>
+  <!-- Outer ring glow -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#F5A623" stroke-width="3" opacity="0.6"/>
+</svg>

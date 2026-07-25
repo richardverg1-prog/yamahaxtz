@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   description: 'Controle completo da sua Yamaha XTZ 250X',
   manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'XTZ Painel' },
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export const viewport: Viewport = {
