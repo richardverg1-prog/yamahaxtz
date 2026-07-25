@@ -3,6 +3,7 @@ import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { Navigation } from '@/components/Navigation';
 import { AuthGuard } from '@/components/AuthGuard';
+import { ModalProvider } from '@/components/ConfirmModal';
 
 export const metadata: Metadata = {
   title: 'XTZ 250X — Painel',
@@ -35,12 +36,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ThemeProvider>
-          <AuthGuard>
-            <div className="app-shell">
-              {children}
-            </div>
-            <Navigation />
-          </AuthGuard>
+          <ModalProvider>
+            <AuthGuard>
+              <div className="app-shell">
+                {children}
+              </div>
+              <Navigation />
+            </AuthGuard>
+          </ModalProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,14 +1,17 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useTheme } from '@/components/ThemeProvider';
-import type { AppSettings, Theme, TireEntry, WishlistItem } from '@/lib/types';
-import { Check, Download, Trash2, Plus, X, ShoppingBag, ExternalLink } from 'lucide-react';
+import { useConfirm } from '@/components/ConfirmModal';
+import { clearSession } from '@/lib/auth';
+import type { AppSettings, Theme, WishlistItem } from '@/lib/types';
+import { Check, Download, Trash2, Plus, X, ShoppingBag, ExternalLink, LogOut } from 'lucide-react';
 
 const THEMES: { key: Theme; label: string; desc: string; colors: [string, string, string] }[] = [
-  { key: 'dark', label: 'Noite', desc: 'Fundo escuro com âmbar — ideal para uso noturno', colors: ['#0D0C08', '#F5A623', '#2E2C22'] },
-  { key: 'light', label: 'Dia', desc: 'Fundo claro e limpo — ideal para luz do dia', colors: ['#F2F0EB', '#C47D12', '#DDDAD2'] },
-  { key: 'sunset', label: 'Pôr do Sol', desc: 'Marrom quente com laranja — estilo café com leite', colors: ['#1E0E06', '#FF8C42', '#4A2810'] },
+  { key: 'dark', label: 'Noite', desc: 'Fundo escuro com âmbar — padrão noturno', colors: ['#0D0C08', '#F5A623', '#2E2C22'] },
+  { key: 'light', label: 'Dia', desc: 'Fundo claro — ideal para luz do dia', colors: ['#F2F0EB', '#C47D12', '#DDDAD2'] },
+  { key: 'azul', label: 'Noite Azul', desc: 'Fundo escuro azulado — visual alternativo', colors: ['#070B14', '#4F8EF7', '#1E3056'] },
 ];
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -20,112 +23,10 @@ const PRIORITY_BG: Record<string, string> = {
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
-function dotAge(code: string): string {
-  if (!code || code.replace(/\s/g, '').length < 4) return '';
-  const last4 = code.replace(/\s/g, '').slice(-4);
-  const week = parseInt(last4.slice(0, 2));
-  const year = 2000 + parseInt(last4.slice(2));
-  if (isNaN(week) || isNaN(year) || week < 1 || week > 53 || year < 2000 || year > 2099) return 'Formato inválido — use SSSAA (ex: 2322)';
-  const mfgDate = new Date(year, 0, 1);
-  mfgDate.setDate(mfgDate.getDate() + (week - 1) * 7);
-  const ageYears = (Date.now() - mfgDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  return `${ageYears.toFixed(1)} anos — semana ${week}/${year}${ageYears > 5 ? ' ⚠️ ATENÇÃO: >5 anos' : ''}`;
-}
-
-function fmtDate(s: string) { if (!s) return '—'; const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; }
-
-function TireEditor({ position, tire, currentMileage, onSave }: {
-  position: 'dianteiro' | 'traseiro';
-  tire?: TireEntry;
-  currentMileage: number;
-  onSave: (t: TireEntry) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [brand, setBrand] = useState(tire?.brand ?? '');
-  const [model, setModel] = useState(tire?.model ?? '');
-  const [size, setSize] = useState(tire?.size ?? '');
-  const [installDate, setInstallDate] = useState(tire?.installDate ?? '');
-  const [installMileage, setInstallMileage] = useState(String(tire?.installMileage ?? ''));
-  const [expectedLifeKm, setExpectedLifeKm] = useState(String(tire?.expectedLifeKm ?? 10000));
-  const [dotCode, setDotCode] = useState(tire?.dotCode ?? '');
-  const [notes, setNotes] = useState(tire?.notes ?? '');
-
-  const label = position === 'dianteiro' ? 'Dianteiro' : 'Traseiro';
-  const defaultSize = position === 'dianteiro' ? '80/100-21' : '110/90-18';
-  const kmUsed = tire ? Math.max(0, currentMileage - (tire.installMileage || 0)) : 0;
-  const lifeKm = tire?.expectedLifeKm || 10000;
-  const pct = Math.min(1, kmUsed / lifeKm);
-  const pctColor = pct > 0.85 ? 'var(--danger)' : pct > 0.6 ? 'var(--warn)' : 'var(--success)';
-
-  function save() {
-    onSave({ position, brand, model, size: size || defaultSize, installDate, installMileage: parseInt(installMileage) || 0, expectedLifeKm: parseInt(expectedLifeKm) || 10000, dotCode, notes });
-    setOpen(false);
-  }
-
-  return (
-    <div className="card-inner" style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>{label} {tire ? `— ${tire.brand} ${tire.model}` : '— não cadastrado'}</div>
-          {tire && (
-            <>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                {tire.size} · instalado em {fmtDate(tire.installDate)} ({tire.installMileage.toLocaleString('pt-BR')} km)
-              </div>
-              {tire.dotCode && (
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>DOT: {tire.dotCode} · {dotAge(tire.dotCode)}</div>
-              )}
-              <div style={{ marginTop: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-                  <span>Vida útil: {kmUsed.toLocaleString('pt-BR')} km usados</span>
-                  <span style={{ color: pctColor, fontWeight: 700 }}>{Math.round(pct * 100)}%</span>
-                </div>
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${pct * 100}%`, background: pctColor }} />
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-                  Restam ~{Math.max(0, lifeKm - kmUsed).toLocaleString('pt-BR')} km de {lifeKm.toLocaleString('pt-BR')} km
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-        <button className="btn btn-ghost btn-sm" style={{ marginLeft: 8, flexShrink: 0 }} onClick={() => setOpen(o => !o)}>
-          {open ? 'Fechar' : tire ? 'Editar' : 'Cadastrar'}
-        </button>
-      </div>
-      {open && (
-        <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-          <div className="form-row form-group">
-            <div><label className="form-label">Marca</label><input className="form-input" placeholder="Pirelli" value={brand} onChange={e => setBrand(e.target.value)} /></div>
-            <div><label className="form-label">Modelo</label><input className="form-input" placeholder="Sport Demon" value={model} onChange={e => setModel(e.target.value)} /></div>
-          </div>
-          <div className="form-row form-group">
-            <div><label className="form-label">Medida</label><input className="form-input" placeholder={defaultSize} value={size} onChange={e => setSize(e.target.value)} /></div>
-            <div><label className="form-label">Vida esperada (km)</label><input className="form-input" type="number" value={expectedLifeKm} onChange={e => setExpectedLifeKm(e.target.value)} /></div>
-          </div>
-          <div className="form-row form-group">
-            <div><label className="form-label">Data de instalação</label><input className="form-input" type="date" value={installDate} onChange={e => setInstallDate(e.target.value)} /></div>
-            <div><label className="form-label">KM na instalação</label><input className="form-input" type="number" value={installMileage} onChange={e => setInstallMileage(e.target.value)} /></div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Código DOT (últimos 4 dígitos = SSAA)</label>
-            <input className="form-input" placeholder="Ex: 2322 (semana 23/2022)" value={dotCode} onChange={e => setDotCode(e.target.value)} />
-            {dotCode && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{dotAge(dotCode)}</div>}
-          </div>
-          <div className="form-group">
-            <label className="form-label">Observações</label>
-            <input className="form-input" placeholder="Estado, notas..." value={notes} onChange={e => setNotes(e.target.value)} />
-          </div>
-          <button className="btn btn-primary btn-full" onClick={save}>Salvar pneu</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Ajustes() {
   const { theme, setTheme } = useTheme();
+  const confirm = useConfirm();
+  const router = useRouter();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [saved, setSaved] = useState(false);
@@ -153,22 +54,12 @@ export default function Ajustes() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  function saveTire(position: 'dianteiro' | 'traseiro', tire: TireEntry) {
-    if (!settings) return;
-    const updated = { ...settings, tires: { ...(settings.tires ?? {}), [position]: tire } };
-    setSettings(updated);
-    storage.setSettings(updated);
-  }
-
   function addWish() {
     if (!newWishDesc) return;
     const item: WishlistItem = {
-      id: uid(),
-      description: newWishDesc,
-      priority: newWishPriority,
+      id: uid(), description: newWishDesc, priority: newWishPriority,
       estimatedPrice: parseFloat(newWishPrice) || 0,
-      url: newWishUrl.trim() || undefined,
-      done: false,
+      url: newWishUrl.trim() || undefined, done: false,
     };
     const updated = [...wishlist, item];
     storage.setWishlist(updated);
@@ -183,7 +74,9 @@ export default function Ajustes() {
     setWishlist(updated);
   }
 
-  function removeWish(id: string) {
+  async function removeWish(id: string) {
+    const ok = await confirm({ title: 'Remover item', message: 'Remover este item da lista de desejo?', confirmLabel: 'Remover', danger: true });
+    if (!ok) return;
     const updated = wishlist.filter(w => w.id !== id);
     storage.setWishlist(updated);
     setWishlist(updated);
@@ -191,13 +84,9 @@ export default function Ajustes() {
 
   function exportData() {
     const data = {
-      settings: storage.getSettings(),
-      maintenance: storage.getMaintenance(),
-      fuel: storage.getFuel(),
-      documents: storage.getDocuments(),
-      wishlist: storage.getWishlist(),
-      trips: storage.getTrips(),
-      checklists: storage.getChecklists(),
+      settings: storage.getSettings(), maintenance: storage.getMaintenance(),
+      fuel: storage.getFuel(), documents: storage.getDocuments(), wishlist: storage.getWishlist(),
+      trips: storage.getTrips(), checklists: storage.getChecklists(),
       gallery: storage.getGallery().map(p => ({ ...p, dataUrl: '[omitida]' })),
       exportedAt: new Date().toISOString(),
     };
@@ -208,11 +97,20 @@ export default function Ajustes() {
     a.click();
   }
 
-  function clearAll() {
-    if (!confirm('Isso vai apagar TODOS os seus dados. Tem certeza?')) return;
-    if (!confirm('Segunda confirmação: apagar tudo mesmo?')) return;
+  async function clearAll() {
+    const ok = await confirm({ title: 'Apagar tudo', message: 'Isso vai apagar TODOS os seus dados permanentemente. Não há como desfazer.', confirmLabel: 'Apagar tudo', danger: true });
+    if (!ok) return;
+    const ok2 = await confirm({ title: 'Confirmar apagamento', message: 'Última confirmação — apagar todos os dados?', confirmLabel: 'Sim, apagar', danger: true });
+    if (!ok2) return;
     storage.clearAll();
     window.location.reload();
+  }
+
+  async function handleLogout() {
+    const ok = await confirm({ title: 'Encerrar sessão', message: 'Deseja sair da sua conta?', confirmLabel: 'Sair', danger: false });
+    if (!ok) return;
+    clearSession();
+    router.push('/login');
   }
 
   if (!settings) return null;
@@ -247,7 +145,7 @@ export default function Ajustes() {
         </div>
 
         {/* Moto */}
-        <div className="section-title">Informações da moto</div>
+        <div className="section-title">Configurações da moto</div>
         <div className="card" style={{ marginBottom: 20 }}>
           <div className="card-pad">
             <div className="form-group">
@@ -290,18 +188,6 @@ export default function Ajustes() {
           </div>
         </div>
 
-        {/* Pneus */}
-        <div className="section-title">Pneus</div>
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-pad">
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.5 }}>
-              O DOT é o código de fabricação na lateral do pneu (ex: DOT ...2322 = semana 23 de 2022).
-            </div>
-            <TireEditor position="dianteiro" tire={settings.tires?.dianteiro} currentMileage={settings.currentMileage} onSave={t => saveTire('dianteiro', t)} />
-            <TireEditor position="traseiro" tire={settings.tires?.traseiro} currentMileage={settings.currentMileage} onSave={t => saveTire('traseiro', t)} />
-          </div>
-        </div>
-
         {/* Wishlist */}
         <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Lista de Desejo</span>
@@ -314,11 +200,8 @@ export default function Ajustes() {
         <div className="card" style={{ marginBottom: 20 }}>
           <div className="card-pad">
             {wishlist.length === 0 && !showAddWish && (
-              <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '12px 0 4px' }}>
-                Nenhum item na lista de desejo
-              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '12px 0 4px' }}>Nenhum item</div>
             )}
-
             {wishlist.map(item => (
               <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)', opacity: item.done ? 0.55 : 1 }}>
                 <button onClick={() => toggleWishDone(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
@@ -327,52 +210,23 @@ export default function Ajustes() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, textDecoration: item.done ? 'line-through' : 'none' }}>{item.description}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                    {item.estimatedPrice > 0 && (
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        ~R${item.estimatedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    )}
-                    {item.url && (
-                      <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}>
-                        <ExternalLink size={11} /> Ver produto
-                      </a>
-                    )}
+                    {item.estimatedPrice > 0 && <span style={{ fontSize: 12, color: 'var(--muted)' }}>~R${item.estimatedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+                    {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}><ExternalLink size={11} /> Ver produto</a>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, textTransform: 'uppercase', letterSpacing: '.04em', background: PRIORITY_BG[item.priority], color: PRIORITY_COLORS[item.priority] }}>
-                    {item.priority}
-                  </span>
-                  <button onClick={() => removeWish(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
-                    <X size={14} />
-                  </button>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, textTransform: 'uppercase', letterSpacing: '.04em', background: PRIORITY_BG[item.priority], color: PRIORITY_COLORS[item.priority] }}>{item.priority}</span>
+                  <button onClick={() => removeWish(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={14} /></button>
                 </div>
               </div>
             ))}
-
             {showAddWish ? (
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: wishlist.length > 0 ? '1px solid var(--border)' : 'none' }}>
-                <div className="form-group">
-                  <label className="form-label">Peça / Item</label>
-                  <input className="form-input" placeholder="Ex: Par de amortecedores" value={newWishDesc} onChange={e => setNewWishDesc(e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Link do produto (opcional)</label>
-                  <input className="form-input" type="url" placeholder="https://..." value={newWishUrl} onChange={e => setNewWishUrl(e.target.value)} />
-                </div>
+                <div className="form-group"><label className="form-label">Peça / Item</label><input className="form-input" placeholder="Ex: Par de amortecedores" value={newWishDesc} onChange={e => setNewWishDesc(e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Link do produto (opcional)</label><input className="form-input" type="url" placeholder="https://..." value={newWishUrl} onChange={e => setNewWishUrl(e.target.value)} /></div>
                 <div className="form-row form-group">
-                  <div>
-                    <label className="form-label">Prioridade</label>
-                    <select className="form-input" value={newWishPriority} onChange={e => setNewWishPriority(e.target.value as WishlistItem['priority'])}>
-                      <option value="alta">Alta</option>
-                      <option value="media">Média</option>
-                      <option value="baixa">Baixa</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="form-label">Preço estimado (R$)</label>
-                    <input className="form-input" type="number" placeholder="0" value={newWishPrice} onChange={e => setNewWishPrice(e.target.value)} />
-                  </div>
+                  <div><label className="form-label">Prioridade</label><select className="form-input" value={newWishPriority} onChange={e => setNewWishPriority(e.target.value as WishlistItem['priority'])}><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div>
+                  <div><label className="form-label">Preço estimado (R$)</label><input className="form-input" type="number" placeholder="0" value={newWishPrice} onChange={e => setNewWishPrice(e.target.value)} /></div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={addWish}>Adicionar</button>
@@ -380,9 +234,7 @@ export default function Ajustes() {
                 </div>
               </div>
             ) : (
-              <button className="btn btn-ghost btn-full" style={{ marginTop: wishlist.length > 0 ? 12 : 0 }} onClick={() => setShowAddWish(true)}>
-                <Plus size={16} /> Adicionar item
-              </button>
+              <button className="btn btn-ghost btn-full" style={{ marginTop: wishlist.length > 0 ? 12 : 0 }} onClick={() => setShowAddWish(true)}><Plus size={16} /> Adicionar item</button>
             )}
           </div>
         </div>
@@ -396,25 +248,30 @@ export default function Ajustes() {
                 <div style={{ fontSize: 15, fontWeight: 600 }}>Exportar dados</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Baixa um JSON com todo o histórico</div>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={exportData}>
-                <Download size={14} /> Exportar
-              </button>
+              <button className="btn btn-ghost btn-sm" onClick={exportData}><Download size={14} /> Exportar</button>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Apagar todos os dados</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Remove todos os registros permanentemente</div>
+              </div>
+              <button className="btn btn-danger-soft btn-sm" onClick={clearAll}><Trash2 size={14} /> Limpar</button>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>Apagar tudo</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Remove todos os seus registros</div>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Encerrar sessão</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Sair e voltar para a tela de login</div>
               </div>
-              <button className="btn btn-danger-soft btn-sm" onClick={clearAll}>
-                <Trash2 size={14} /> Limpar
+              <button className="btn btn-ghost btn-sm" onClick={handleLogout} style={{ color: 'var(--muted)', gap: 6 }}>
+                <LogOut size={14} /> Sair
               </button>
             </div>
           </div>
         </div>
 
         <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', paddingBottom: 8 }}>
-          XTZ 250X — Painel v3.0<br />
-          Dados salvos localmente no dispositivo
+          XTZ 250X · Painel v3.1<br />
+          <span style={{ fontSize: 11 }}>Dados salvos localmente neste navegador</span>
         </div>
       </div>
     </>

@@ -42,25 +42,25 @@
   --shadow:      rgba(0,0,0,.12);
 }
 
-/* ── PÔR DO SOL ───────────────────────────────────────── */
-[data-theme="sunset"] {
-  --bg:          #1E0E06;
-  --surface:     #2C1608;
-  --surface2:    #371C0A;
-  --border:      #4A2810;
-  --text:        #F5E6D0;
-  --muted:       #9A7A5A;
-  --accent:      #FF8C42;
-  --accent-dim:  rgba(255,140,66,.15);
-  --accent-fg:   #1E0E06;
-  --danger:      #FF6060;
-  --danger-dim:  rgba(255,96,96,.15);
-  --success:     #60C880;
-  --success-dim: rgba(96,200,128,.15);
-  --warn:        #FFB347;
-  --warn-dim:    rgba(255,179,71,.15);
-  --nav:         #1E0E06;
-  --shadow:      rgba(0,0,0,.6);
+/* ── NOITE AZUL ───────────────────────────────────────── */
+[data-theme="azul"] {
+  --bg:          #070B14;
+  --surface:     #0F1725;
+  --surface2:    #162038;
+  --border:      #1E3056;
+  --text:        #DDE8FA;
+  --muted:       #5A7299;
+  --accent:      #4F8EF7;
+  --accent-dim:  rgba(79,142,247,.15);
+  --accent-fg:   #FFFFFF;
+  --danger:      #EF5050;
+  --danger-dim:  rgba(239,80,80,.12);
+  --success:     #34C472;
+  --success-dim: rgba(52,196,114,.12);
+  --warn:        #F59E0B;
+  --warn-dim:    rgba(245,158,11,.12);
+  --nav:         #070B14;
+  --shadow:      rgba(0,0,0,.65);
 }
 
 /* ── BASE ─────────────────────────────────────────────── */
@@ -213,6 +213,7 @@ body {
   letter-spacing: -.01em;
 }
 .nav-logout {
+  display: none;
   color: var(--muted);
   cursor: pointer;
 }
@@ -224,8 +225,16 @@ body {
     padding-bottom: 0;
     padding-left: 240px;
   }
-  .page { max-width: 900px; }
-  .page-header { max-width: 900px; }
+  .page { max-width: 1400px; padding-left: 32px; padding-right: 32px; }
+  .page-header { max-width: 1400px; padding-left: 32px; padding-right: 32px; }
+
+  /* Dashboard 2-column grid */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+    align-items: start;
+  }
 
   .bottom-nav {
     top: 0;
@@ -264,10 +273,10 @@ body {
   .nav-tab svg { width: 20px; height: 20px; }
 
   .nav-logout {
+    display: flex;
     margin-top: auto;
     border-top: 1px solid var(--border);
     padding-top: 12px;
-    margin-top: auto;
   }
 
   .fab {

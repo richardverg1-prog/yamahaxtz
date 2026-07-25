@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { storage, compressImage } from '@/lib/storage';
+import { useConfirm } from '@/components/ConfirmModal';
 import type { FuelEntry } from '@/lib/types';
 import { Plus, Droplets, X, Trash2, TrendingUp, Camera, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
 import {
@@ -14,9 +15,8 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function calcKmL(entries: FuelEntry[]): FuelEntry[] {
   const sorted = [...entries].sort((a, b) => a.mileage - b.mileage);
   return sorted.map((e, i) => {
-    if (i === 0 || !e.isFull) return { ...e, kmL: null };
-    const prev = sorted.slice(0, i).reverse().find(p => p.isFull);
-    if (!prev) return { ...e, kmL: null };
+    if (i === 0) return { ...e, kmL: null };
+    const prev = sorted[i - 1];
     const distancia = e.mileage - prev.mileage;
     if (distancia <= 0 || e.liters <= 0) return { ...e, kmL: null };
     return { ...e, kmL: Math.round((distancia / e.liters) * 10) / 10 };
@@ -108,7 +108,6 @@ function Modal({ onClose, onSave, lastMileage }: { onClose: () => void; onSave: 
             <button className={`btn btn-sm ${isFull ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setIsFull(true)}>Sim (cheio)</button>
             <button className={`btn btn-sm ${!isFull ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setIsFull(false)}>Não (parcial)</button>
           </div>
-          {!isFull && <div style={{ fontSize: 12, color: 'var(--warn)', marginTop: 6 }}>Parcial não calcula km/L</div>}
         </div>
 
         <div className="form-group">
@@ -162,7 +161,14 @@ function PriceTooltip({ active, payload, label }: any) {
 
 function FuelCard({ entry, onDelete }: { entry: FuelEntry; onDelete: (id: string) => void }) {
   const [open, setOpen] = useState(false);
+  const confirm = useConfirm();
   const hasPhotos = (entry.photos?.length ?? 0) > 0;
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    const ok = await confirm({ title: 'Excluir abastecimento', message: 'Remover este abastecimento do histórico?', confirmLabel: 'Excluir', danger: true });
+    if (ok) onDelete(entry.id);
+  }
 
   return (
     <div className="card" style={{ marginBottom: 8 }}>
@@ -191,7 +197,7 @@ function FuelCard({ entry, onDelete }: { entry: FuelEntry; onDelete: (id: string
               {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </div>
           )}
-          <button onClick={e => { e.stopPropagation(); if (confirm('Excluir?')) onDelete(entry.id); }}
+          <button onClick={handleDelete}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', marginTop: 4, display: 'block', marginLeft: 'auto' }}>
             <Trash2 size={14} />
           </button>
@@ -278,7 +284,6 @@ export default function Combustivel() {
 
       <div className="page" style={{ paddingTop: 16 }}>
 
-        {/* km/L chart */}
         {kmLChartData.length >= 2 && (
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="card-pad">
@@ -299,7 +304,6 @@ export default function Combustivel() {
           </div>
         )}
 
-        {/* Preço/L chart */}
         {priceChartData.length >= 2 && (
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="card-pad">
@@ -322,7 +326,7 @@ export default function Combustivel() {
 
         {validKmL.length < 2 && (
           <div style={{ background: 'var(--surface2)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>
-            ⛽ O gráfico de consumo aparece a partir do 2º abastecimento cheio. Zere o Trip2 no painel da moto e registre km + litros em cada abastecimento completo.
+            ⛽ Registre ao menos 2 abastecimentos para ver o gráfico de consumo. km/L é calculado automaticamente a partir da diferença de quilometragem.
           </div>
         )}
 

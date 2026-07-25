@@ -39,7 +39,7 @@ export interface GalleryPhoto {
   dataUrl: string;
 }
 
-export type Theme = 'dark' | 'light' | 'sunset';
+export type Theme = 'dark' | 'light' | 'azul';
 
 export interface TireEntry {
   position: 'dianteiro' | 'traseiro';
@@ -62,6 +62,27 @@ export interface MotoDocument {
   amount?: number;
   status?: 'pago' | 'pendente';
   notes?: string;
+  // Multa fields
+  infractedDate?: string;
+  paymentDate?: string;
+}
+
+export interface InsurancePayment {
+  id: string;
+  month: string;    // "2026-07"
+  amount: number;
+  paidAt: string;   // ISO date
+}
+
+export interface InsuranceRecord {
+  id: string;
+  insurerName: string;
+  policyNumber?: string;
+  contractStartDate: string;
+  contractMonths: number;
+  monthlyValue: number;
+  notes?: string;
+  payments: InsurancePayment[];
 }
 
 export interface WishlistItem {

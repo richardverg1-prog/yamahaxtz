@@ -1,5 +1,5 @@
 'use client';
-import type { MaintenanceEntry, FuelEntry, GalleryPhoto, AppSettings, MotoDocument, WishlistItem, TripLog, ChecklistRun } from './types';
+import type { MaintenanceEntry, FuelEntry, GalleryPhoto, AppSettings, MotoDocument, WishlistItem, TripLog, ChecklistRun, InsuranceRecord } from './types';
 
 function getCurrentUserId(): string {
   if (typeof window === 'undefined') return 'default';
@@ -137,7 +137,7 @@ export const storage = {
 
   getSettings: (): AppSettings => {
     const s = get(uk('settings'), INIT_SETTINGS);
-    // Backfill field added after initial seed
+    if ((s.theme as string) === 'sunset') return { ...s, theme: 'dark', lastChainCheckMileage: s.lastChainCheckMileage || s.lastOilChangeMileage || 1350 };
     if (!s.lastChainCheckMileage) return { ...s, lastChainCheckMileage: s.lastOilChangeMileage || 1350 };
     return s;
   },
@@ -158,6 +158,9 @@ export const storage = {
 
   getChecklists: (): ChecklistRun[] => get(uk('checklists'), []),
   setChecklists: (d: ChecklistRun[]) => set(uk('checklists'), d),
+
+  getInsurance: (): InsuranceRecord | null => get(uk('insurance'), null),
+  setInsurance: (d: InsuranceRecord | null) => set(uk('insurance'), d),
 
   clearAll: () => {
     if (typeof window === 'undefined') return;

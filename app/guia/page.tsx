@@ -2,8 +2,10 @@
 import { useEffect, useState } from 'react';
 import { SPECS, DICAS } from '@/lib/specs';
 import { storage } from '@/lib/storage';
-import type { ChecklistRun } from '@/lib/types';
-import { ChevronDown, ChevronUp, CheckSquare, Square, History, Save } from 'lucide-react';
+import { useAlert, useConfirm } from '@/components/ConfirmModal';
+import { TireEditor } from '@/components/TireEditor';
+import type { AppSettings, ChecklistRun, TireEntry } from '@/lib/types';
+import { ChevronDown, ChevronUp, CheckSquare, Square, History, Save, Trash2 } from 'lucide-react';
 
 const TABS = ['Checklist', 'Dicas', 'Motor', 'Óleo', 'Ignição', 'Pneus', 'Torques', 'Elétrica', 'Periódica'] as const;
 type Tab = typeof TABS[number];
@@ -179,16 +181,20 @@ function ChecklistSection({ section, checks, onChange }: {
 }
 
 export default function Guia() {
+  const showAlert = useAlert();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<Tab>('Checklist');
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [runKm, setRunKm] = useState('');
   const [savedRuns, setSavedRuns] = useState<ChecklistRun[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
     setSavedRuns(storage.getChecklists().sort((a, b) => b.date.localeCompare(a.date)));
     const s = storage.getSettings();
     setRunKm(String(s.currentMileage));
+    setSettings(s);
   }, []);
 
   const allIds = allItemIds();
@@ -207,7 +213,7 @@ export default function Guia() {
 
   function clearAll() { setChecks({}); }
 
-  function saveRun() {
+  async function saveRun() {
     const km = parseInt(runKm);
     if (!km) return;
     const run: ChecklistRun = {
@@ -221,7 +227,21 @@ export default function Guia() {
     storage.setChecklists(updated);
     setSavedRuns(updated);
     storage.patchSettings({ currentMileage: km });
-    alert(`Verificação salva! ${checkedTotal}/${allIds.length} itens OK.`);
+    await showAlert({ title: 'Verificação salva!', message: `${checkedTotal}/${allIds.length} itens verificados.` });
+  }
+
+  async function deleteRun(id: string) {
+    const ok = await confirm({ title: 'Excluir verificação', message: 'Remover este registro do histórico?', confirmLabel: 'Excluir', danger: true });
+    if (!ok) return;
+    const updated = savedRuns.filter(r => r.id !== id);
+    storage.setChecklists(updated);
+    setSavedRuns(updated);
+  }
+
+  function handleTireSave(position: 'dianteiro' | 'traseiro', tire: TireEntry) {
+    const updated = { ...settings!, tires: { ...settings!.tires, [position]: tire } };
+    storage.setSettings(updated);
+    setSettings(updated);
   }
 
   function fmtDate(s: string) { const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; }
@@ -287,9 +307,31 @@ export default function Guia() {
             <div style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--accent)', marginBottom: 10 }}>
               💡 Verificar sempre com pneus FRIOS (moto parada por pelo menos 3h ou rodada menos de 1,5km).
             </div>
-            <div style={{ background: 'var(--success-dim)', border: '1px solid var(--success)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--success)' }}>
+            <div style={{ background: 'var(--success-dim)', border: '1px solid var(--success)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--success)', marginBottom: 16 }}>
               ✓ Os valores de 29/33 psi são corretos para pneus motard/street (Pirelli Sport Demon). Calibrar semanalmente.
             </div>
+
+            {settings && (
+              <>
+                <div className="section-title">Meus pneus</div>
+                <div className="card">
+                  <div className="card-pad">
+                    <TireEditor
+                      position="dianteiro"
+                      tire={settings.tires?.dianteiro}
+                      currentMileage={settings.currentMileage}
+                      onSave={t => handleTireSave('dianteiro', t)}
+                    />
+                    <TireEditor
+                      position="traseiro"
+                      tire={settings.tires?.traseiro}
+                      currentMileage={settings.currentMileage}
+                      onSave={t => handleTireSave('traseiro', t)}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -384,7 +426,6 @@ export default function Guia() {
 
         {tab === 'Checklist' && (
           <>
-            {/* Progress header */}
             <div className="card" style={{ marginBottom: 14 }}>
               <div className="card-pad">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -410,7 +451,6 @@ export default function Guia() {
               <ChecklistSection key={section.id} section={section} checks={checks} onChange={handleCheck} />
             ))}
 
-            {/* Save run */}
             <div className="card" style={{ marginTop: 6 }}>
               <div className="card-pad">
                 <div className="card-title">Registrar verificação</div>
@@ -430,7 +470,6 @@ export default function Guia() {
               </div>
             </div>
 
-            {/* History */}
             {savedRuns.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 <button
@@ -455,6 +494,13 @@ export default function Guia() {
                           <span className={`badge ${run.passed ? 'badge-success' : 'badge-warn'}`}>
                             {run.passed ? 'OK' : 'Incompleto'}
                           </span>
+                          <button
+                            onClick={() => deleteRun(run.id)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', flexShrink: 0, padding: 4 }}
+                            title="Excluir verificação"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       );
                     })}
