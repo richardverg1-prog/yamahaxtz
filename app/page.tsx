@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { storage } from '@/lib/storage';
 import type { AppSettings, MaintenanceEntry, FuelEntry, MotoDocument, WishlistItem, InsuranceRecord } from '@/lib/types';
-import { AlertTriangle, Wrench, Droplets, ChevronRight, Check, Bell, X, Shield, AlertCircle, ShoppingBag } from 'lucide-react';
+import { AlertTriangle, Wrench, Droplets, ChevronRight, Check, Bell, X, Shield, AlertCircle, ShoppingBag, Plus, ExternalLink, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 function fmt(n: number) { return n.toLocaleString('pt-BR'); }
@@ -209,6 +209,34 @@ export default function Dashboard() {
   const [editing, setEditing] = useState(false);
   const [mileageInput, setMileageInput] = useState('');
   const [showNotifs, setShowNotifs] = useState(false);
+  const [showAddWish, setShowAddWish] = useState(false);
+  const [newWishDesc, setNewWishDesc] = useState('');
+  const [newWishPriority, setNewWishPriority] = useState<WishlistItem['priority']>('media');
+  const [newWishPrice, setNewWishPrice] = useState('');
+  const [newWishUrl, setNewWishUrl] = useState('');
+
+  function addWish() {
+    if (!newWishDesc.trim()) return;
+    const item: WishlistItem = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      description: newWishDesc.trim(), priority: newWishPriority,
+      estimatedPrice: parseFloat(newWishPrice) || 0,
+      url: newWishUrl.trim() || undefined, done: false,
+    };
+    const updated = [...wishlist, item];
+    storage.setWishlist(updated); setWishlist(updated);
+    setShowAddWish(false); setNewWishDesc(''); setNewWishPrice(''); setNewWishUrl(''); setNewWishPriority('media');
+  }
+
+  function toggleWishDone(id: string) {
+    const updated = wishlist.map(w => w.id === id ? { ...w, done: !w.done } : w);
+    storage.setWishlist(updated); setWishlist(updated);
+  }
+
+  function removeWish(id: string) {
+    const updated = wishlist.filter(w => w.id !== id);
+    storage.setWishlist(updated); setWishlist(updated);
+  }
 
   useEffect(() => {
     setSettings(storage.getSettings());
@@ -473,7 +501,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* LISTA DE DESEJO — always visible in main panel */}
+            {/* LISTA DE DESEJO */}
             <div className="card" style={{ marginBottom: 14 }}>
               <div className="card-pad">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -481,35 +509,74 @@ export default function Dashboard() {
                     <ShoppingBag size={16} style={{ color: 'var(--accent)' }} />
                     <div className="card-title" style={{ margin: 0 }}>Lista de desejo</div>
                   </div>
-                  <Link href="/ajustes" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2 }}>
-                    Gerenciar <ChevronRight size={14} />
-                  </Link>
+                  {pendingWish.length > 0 && (
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>{pendingWish.length} pendentes · ~{fmtR(wishTotal)}</span>
+                  )}
                 </div>
-                {pendingWish.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--muted)', fontSize: 13 }}>
-                    Nenhum item na lista · <Link href="/ajustes" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Adicionar</Link>
+
+                {/* Items list */}
+                {wishlist.length === 0 && !showAddWish && (
+                  <div style={{ textAlign: 'center', padding: '12px 0 4px', color: 'var(--muted)', fontSize: 13 }}>
+                    Nenhum item ainda
                   </div>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
-                      {pendingWish.length} {pendingWish.length === 1 ? 'item' : 'itens'} · estimado {fmtR(wishTotal)}
-                    </div>
-                    {pendingWish.slice(0, 5).map((item, i) => (
-                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < Math.min(pendingWish.length, 5) - 1 ? '1px solid var(--border)' : 'none' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.priority === 'alta' ? 'var(--danger)' : item.priority === 'media' ? 'var(--warn)' : 'var(--muted)', flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</span>
-                          <span className={`badge badge-${item.priority === 'alta' ? 'danger' : item.priority === 'media' ? 'warn' : 'muted'}`} style={{ flexShrink: 0 }}>{item.priority}</span>
-                        </div>
-                        {item.estimatedPrice > 0 && (
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', flexShrink: 0, marginLeft: 8 }}>~{fmtR(item.estimatedPrice)}</span>
+                )}
+                {wishlist.map((item, i) => (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < wishlist.length - 1 ? '1px solid var(--border)' : 'none', opacity: item.done ? 0.5 : 1 }}>
+                    <button onClick={() => toggleWishDone(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2 }}>
+                      <ShoppingBag size={17} style={{ color: item.done ? 'var(--success)' : 'var(--muted)' }} />
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, textDecoration: item.done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                        <span className={`badge badge-${item.priority === 'alta' ? 'danger' : item.priority === 'media' ? 'warn' : 'muted'}`}>{item.priority}</span>
+                        {item.estimatedPrice > 0 && <span style={{ fontSize: 11, color: 'var(--muted)' }}>~{fmtR(item.estimatedPrice)}</span>}
+                        {item.url && (
+                          <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 2, textDecoration: 'none' }}>
+                            <ExternalLink size={10} /> ver
+                          </a>
                         )}
                       </div>
-                    ))}
-                    {pendingWish.length > 5 && (
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, textAlign: 'center' }}>+{pendingWish.length - 5} itens · <Link href="/ajustes" style={{ color: 'var(--accent)', textDecoration: 'none' }}>ver todos</Link></div>
-                    )}
-                  </>
+                    </div>
+                    <button onClick={() => removeWish(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, flexShrink: 0 }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Add form */}
+                {showAddWish ? (
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: wishlist.length > 0 ? '1px solid var(--border)' : 'none' }}>
+                    <div className="form-group">
+                      <label className="form-label">Peça / Item</label>
+                      <input className="form-input" placeholder="Ex: Par de amortecedores" value={newWishDesc} onChange={e => setNewWishDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && addWish()} autoFocus />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Link (opcional)</label>
+                      <input className="form-input" type="url" placeholder="https://..." value={newWishUrl} onChange={e => setNewWishUrl(e.target.value)} />
+                    </div>
+                    <div className="form-row form-group">
+                      <div>
+                        <label className="form-label">Prioridade</label>
+                        <select className="form-input" value={newWishPriority} onChange={e => setNewWishPriority(e.target.value as WishlistItem['priority'])}>
+                          <option value="alta">Alta</option>
+                          <option value="media">Média</option>
+                          <option value="baixa">Baixa</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label">Preço est. (R$)</label>
+                        <input className="form-input" type="number" placeholder="0" value={newWishPrice} onChange={e => setNewWishPrice(e.target.value)} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={addWish}>Adicionar</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setShowAddWish(false); setNewWishDesc(''); setNewWishPrice(''); setNewWishUrl(''); }}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="btn btn-ghost btn-full" style={{ marginTop: wishlist.length > 0 ? 12 : 4 }} onClick={() => setShowAddWish(true)}>
+                    <Plus size={15} /> Adicionar item
+                  </button>
                 )}
               </div>
             </div>

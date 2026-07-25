@@ -5,8 +5,8 @@ import { storage } from '@/lib/storage';
 import { useTheme } from '@/components/ThemeProvider';
 import { useConfirm } from '@/components/ConfirmModal';
 import { clearSession } from '@/lib/auth';
-import type { AppSettings, Theme, WishlistItem } from '@/lib/types';
-import { Check, Download, Trash2, Plus, X, ShoppingBag, ExternalLink, LogOut } from 'lucide-react';
+import type { AppSettings, Theme } from '@/lib/types';
+import { Check, Download, Trash2, LogOut } from 'lucide-react';
 
 const THEMES: { key: Theme; label: string; desc: string; colors: [string, string, string] }[] = [
   { key: 'dark', label: 'Noite', desc: 'Fundo escuro com âmbar — padrão noturno', colors: ['#0D0C08', '#F5A623', '#2E2C22'] },
@@ -14,32 +14,15 @@ const THEMES: { key: Theme; label: string; desc: string; colors: [string, string
   { key: 'azul', label: 'Noite Azul', desc: 'Fundo escuro azulado — visual alternativo', colors: ['#070B14', '#4F8EF7', '#1E3056'] },
 ];
 
-const PRIORITY_COLORS: Record<string, string> = {
-  alta: 'var(--danger)', media: 'var(--warn)', baixa: 'var(--muted)',
-};
-const PRIORITY_BG: Record<string, string> = {
-  alta: 'var(--danger-dim)', media: 'var(--warn-dim)', baixa: 'var(--surface2)',
-};
-
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
-
 export default function Ajustes() {
   const { theme, setTheme } = useTheme();
   const confirm = useConfirm();
   const router = useRouter();
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [saved, setSaved] = useState(false);
-
-  const [showAddWish, setShowAddWish] = useState(false);
-  const [newWishDesc, setNewWishDesc] = useState('');
-  const [newWishPriority, setNewWishPriority] = useState<WishlistItem['priority']>('media');
-  const [newWishPrice, setNewWishPrice] = useState('');
-  const [newWishUrl, setNewWishUrl] = useState('');
 
   useEffect(() => {
     setSettings(storage.getSettings());
-    setWishlist(storage.getWishlist());
   }, []);
 
   function patch(p: Partial<AppSettings>) {
@@ -52,34 +35,6 @@ export default function Ajustes() {
     storage.setSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  }
-
-  function addWish() {
-    if (!newWishDesc) return;
-    const item: WishlistItem = {
-      id: uid(), description: newWishDesc, priority: newWishPriority,
-      estimatedPrice: parseFloat(newWishPrice) || 0,
-      url: newWishUrl.trim() || undefined, done: false,
-    };
-    const updated = [...wishlist, item];
-    storage.setWishlist(updated);
-    setWishlist(updated);
-    setShowAddWish(false);
-    setNewWishDesc(''); setNewWishPrice(''); setNewWishUrl('');
-  }
-
-  function toggleWishDone(id: string) {
-    const updated = wishlist.map(w => w.id === id ? { ...w, done: !w.done } : w);
-    storage.setWishlist(updated);
-    setWishlist(updated);
-  }
-
-  async function removeWish(id: string) {
-    const ok = await confirm({ title: 'Remover item', message: 'Remover este item da lista de desejo?', confirmLabel: 'Remover', danger: true });
-    if (!ok) return;
-    const updated = wishlist.filter(w => w.id !== id);
-    storage.setWishlist(updated);
-    setWishlist(updated);
   }
 
   function exportData() {
@@ -114,9 +69,6 @@ export default function Ajustes() {
   }
 
   if (!settings) return null;
-
-  const pendingWish = wishlist.filter(w => !w.done);
-  const pendingTotal = pendingWish.reduce((s, w) => s + (w.estimatedPrice || 0), 0);
 
   return (
     <>
@@ -185,57 +137,6 @@ export default function Ajustes() {
             <button className={`btn btn-full ${saved ? 'btn-ghost' : 'btn-primary'}`} onClick={saveSettings}>
               {saved ? <><Check size={16} /> Salvo!</> : 'Salvar configurações'}
             </button>
-          </div>
-        </div>
-
-        {/* Wishlist */}
-        <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Lista de Desejo</span>
-          {pendingWish.length > 0 && (
-            <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
-              {pendingWish.length} pendentes · R${pendingTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          )}
-        </div>
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-pad">
-            {wishlist.length === 0 && !showAddWish && (
-              <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '12px 0 4px' }}>Nenhum item</div>
-            )}
-            {wishlist.map(item => (
-              <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)', opacity: item.done ? 0.55 : 1 }}>
-                <button onClick={() => toggleWishDone(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-                  <ShoppingBag size={18} style={{ color: item.done ? 'var(--success)' : 'var(--muted)' }} />
-                </button>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, textDecoration: item.done ? 'line-through' : 'none' }}>{item.description}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                    {item.estimatedPrice > 0 && <span style={{ fontSize: 12, color: 'var(--muted)' }}>~R${item.estimatedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
-                    {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}><ExternalLink size={11} /> Ver produto</a>}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, textTransform: 'uppercase', letterSpacing: '.04em', background: PRIORITY_BG[item.priority], color: PRIORITY_COLORS[item.priority] }}>{item.priority}</span>
-                  <button onClick={() => removeWish(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={14} /></button>
-                </div>
-              </div>
-            ))}
-            {showAddWish ? (
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: wishlist.length > 0 ? '1px solid var(--border)' : 'none' }}>
-                <div className="form-group"><label className="form-label">Peça / Item</label><input className="form-input" placeholder="Ex: Par de amortecedores" value={newWishDesc} onChange={e => setNewWishDesc(e.target.value)} /></div>
-                <div className="form-group"><label className="form-label">Link do produto (opcional)</label><input className="form-input" type="url" placeholder="https://..." value={newWishUrl} onChange={e => setNewWishUrl(e.target.value)} /></div>
-                <div className="form-row form-group">
-                  <div><label className="form-label">Prioridade</label><select className="form-input" value={newWishPriority} onChange={e => setNewWishPriority(e.target.value as WishlistItem['priority'])}><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div>
-                  <div><label className="form-label">Preço estimado (R$)</label><input className="form-input" type="number" placeholder="0" value={newWishPrice} onChange={e => setNewWishPrice(e.target.value)} /></div>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={addWish}>Adicionar</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowAddWish(false)}>Cancelar</button>
-                </div>
-              </div>
-            ) : (
-              <button className="btn btn-ghost btn-full" style={{ marginTop: wishlist.length > 0 ? 12 : 0 }} onClick={() => setShowAddWish(true)}><Plus size={16} /> Adicionar item</button>
-            )}
           </div>
         </div>
 
