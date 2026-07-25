@@ -4,9 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { pullFromCloud } from '@/lib/sync';
 
-// Module-level: reset on full page reload (F5 / new tab)
 let hasInitialSynced = false;
-let lastFocusPull = 0;
 
 function norm(p: string) { return p !== '/' ? p.replace(/\/$/, '') : '/'; }
 
@@ -16,24 +14,45 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
 
-  // Pull on window focus — catches edits from other devices while tab was open
+  // Background sync: poll every 20s + on visibility change + on focus
   useEffect(() => {
     const session = getSession();
     if (!session) return;
 
-    function onFocus() {
+    let active = true;
+    let isFetching = false;
+    let lastPull = 0;
+
+    async function doPull() {
       const now = Date.now();
-      if (now - lastFocusPull < 30_000) return; // max once per 30s
-      lastFocusPull = now;
-      pullFromCloud().then(changed => {
-        if (changed) window.location.reload();
-      }).catch(() => {});
+      if (!active || isFetching || now - lastPull < 10_000) return;
+      lastPull = now;
+      isFetching = true;
+      try {
+        const changed = await pullFromCloud();
+        if (active && changed) window.location.reload();
+      } catch { /* ignore network errors */ }
+      finally { isFetching = false; }
     }
 
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    const timer = setInterval(doPull, 20_000);
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') doPull();
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', doPull);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', doPull);
+    };
   }, []);
 
+  // Auth + initial sync
   useEffect(() => {
     const session = getSession();
 
