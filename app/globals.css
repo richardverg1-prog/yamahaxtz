@@ -103,6 +103,8 @@ body {
 }
 .nav-tab.active { color: var(--accent); }
 .nav-tab svg { width: 22px; height: 22px; stroke-width: 1.6; }
+.nav-label-full { display: none; }
+.nav-label-short { display: inline; }
 
 /* ── CARDS ────────────────────────────────────────────── */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
@@ -271,6 +273,8 @@ body {
     letter-spacing: 0;
   }
   .nav-tab svg { width: 20px; height: 20px; }
+  .nav-label-full { display: inline; }
+  .nav-label-short { display: none; }
 
   .nav-logout {
     display: flex;

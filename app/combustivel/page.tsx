@@ -54,13 +54,17 @@ function Modal({ onClose, onSave, lastMileage }: { onClose: () => void; onSave: 
 
   function save() {
     if (!mileage || !liters || !total) return;
+    const km = parseInt(mileage);
     const entry: FuelEntry = {
-      id: uid(), date, mileage: parseInt(mileage),
+      id: uid(), date, mileage: km,
       liters: parseFloat(liters), totalCost: parseFloat(total),
       pricePerLiter: parseFloat(pricePerLiter) || parseFloat(total) / parseFloat(liters),
       isFull, notes, kmL: null, photos,
     };
-    storage.patchSettings({ currentMileage: parseInt(mileage) });
+    // Only advance the odometer, never go back
+    if (km > storage.getSettings().currentMileage) {
+      storage.patchSettings({ currentMileage: km });
+    }
     onSave(entry);
   }
 
@@ -235,9 +239,24 @@ export default function Combustivel() {
   }
 
   function handleDelete(id: string) {
-    const updated = calcKmL(storage.getFuel().filter(e => e.id !== id));
+    const toDelete = storage.getFuel().find(e => e.id === id);
+    const remaining = storage.getFuel().filter(e => e.id !== id);
+    const updated = calcKmL(remaining);
     storage.setFuel(updated);
     setEntries(updated);
+
+    // If the deleted entry was what set the current odometer, revert to max of remaining
+    const settings = storage.getSettings();
+    if (toDelete && settings.currentMileage === toDelete.mileage) {
+      const maint = storage.getMaintenance();
+      const allKm = [
+        ...remaining.map(e => e.mileage),
+        ...maint.map(e => e.mileage),
+      ];
+      if (allKm.length > 0) {
+        storage.patchSettings({ currentMileage: Math.max(...allKm) });
+      }
+    }
   }
 
   const validKmL = entries.filter(e => e.kmL !== null && e.kmL! > 0).sort((a, b) => a.mileage - b.mileage);

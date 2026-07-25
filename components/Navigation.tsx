@@ -5,12 +5,12 @@ import { Home, Wrench, Droplets, BookOpen, Settings, FileText, LogOut, ShieldChe
 import { clearSession, getSession, isAdmin } from '@/lib/auth';
 
 const TABS = [
-  { href: '/', label: 'Painel', Icon: Home },
-  { href: '/manutencao', label: 'Manutenção', Icon: Wrench },
-  { href: '/combustivel', label: 'Combustível', Icon: Droplets },
-  { href: '/documentos', label: 'Docs', Icon: FileText },
-  { href: '/guia', label: 'Guia', Icon: BookOpen },
-  { href: '/ajustes', label: 'Ajustes', Icon: Settings },
+  { href: '/', label: 'Painel', short: 'Painel', Icon: Home },
+  { href: '/manutencao', label: 'Manutenção', short: 'Manut.', Icon: Wrench },
+  { href: '/combustivel', label: 'Combustível', short: 'Comb.', Icon: Droplets },
+  { href: '/documentos', label: 'Documentos', short: 'Docs', Icon: FileText },
+  { href: '/guia', label: 'Guia', short: 'Guia', Icon: BookOpen },
+  { href: '/ajustes', label: 'Ajustes', short: 'Ajust.', Icon: Settings },
 ];
 
 function norm(p: string) { return p !== '/' ? p.replace(/\/$/, '') : '/'; }
@@ -35,12 +35,13 @@ export function Navigation() {
         <span style={{ fontSize: 18 }}>🏍️</span>
         <span>XTZ Painel</span>
       </div>
-      {TABS.map(({ href, label, Icon }) => {
+      {TABS.map(({ href, label, short, Icon }) => {
         const active = path === href || (href !== '/' && path.startsWith(href));
         return (
           <Link key={href} href={href} className={`nav-tab${active ? ' active' : ''}`}>
             <Icon />
-            <span>{label}</span>
+            <span className="nav-label-full">{label}</span>
+            <span className="nav-label-short">{short}</span>
           </Link>
         );
       })}
