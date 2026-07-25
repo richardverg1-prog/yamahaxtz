@@ -4,6 +4,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { pullFromCloud } from '@/lib/sync';
 
+// Module-level: reset on full page reload (F5 / new tab)
+let hasInitialSynced = false;
+let lastFocusPull = 0;
+
 function norm(p: string) { return p !== '/' ? p.replace(/\/$/, '') : '/'; }
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -11,6 +15,24 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const path = norm(raw ?? '/');
   const router = useRouter();
   const [ready, setReady] = useState(false);
+
+  // Pull on window focus — catches edits from other devices while tab was open
+  useEffect(() => {
+    const session = getSession();
+    if (!session) return;
+
+    function onFocus() {
+      const now = Date.now();
+      if (now - lastFocusPull < 30_000) return; // max once per 30s
+      lastFocusPull = now;
+      pullFromCloud().then(changed => {
+        if (changed) window.location.reload();
+      }).catch(() => {});
+    }
+
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   useEffect(() => {
     const session = getSession();
@@ -31,9 +53,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const syncKey = `xtz_sync_done_${session.userId}`;
-    if (!sessionStorage.getItem(syncKey)) {
-      sessionStorage.setItem(syncKey, '1');
+    if (!hasInitialSynced) {
+      hasInitialSynced = true;
       pullFromCloud()
         .catch(() => {})
         .finally(() => setReady(true));
