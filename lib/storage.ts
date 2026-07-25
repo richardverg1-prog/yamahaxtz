@@ -1,5 +1,6 @@
 'use client';
 import type { MaintenanceEntry, FuelEntry, GalleryPhoto, AppSettings, MotoDocument, WishlistItem, TripLog, ChecklistRun, InsuranceRecord } from './types';
+import { scheduleSyncPush } from './sync';
 
 function getCurrentUserId(): string {
   if (typeof window === 'undefined') return 'default';
@@ -123,44 +124,51 @@ export function ensureSeeded() {
   }
 
   set(seedKey, true);
+  scheduleSyncPush();
 }
 
 export const storage = {
   getMaintenance: (): MaintenanceEntry[] => get(uk('maintenance'), []),
-  setMaintenance: (d: MaintenanceEntry[]) => set(uk('maintenance'), d),
+  setMaintenance: (d: MaintenanceEntry[]) => { set(uk('maintenance'), d); scheduleSyncPush(); },
 
   getFuel: (): FuelEntry[] => get(uk('fuel'), []),
-  setFuel: (d: FuelEntry[]) => set(uk('fuel'), d),
+  setFuel: (d: FuelEntry[]) => { set(uk('fuel'), d); scheduleSyncPush(); },
 
   getGallery: (): GalleryPhoto[] => get(uk('gallery'), []),
-  setGallery: (d: GalleryPhoto[]) => set(uk('gallery'), d),
+  setGallery: (d: GalleryPhoto[]) => { set(uk('gallery'), d); scheduleSyncPush(); },
 
   getSettings: (): AppSettings => {
     const s = get(uk('settings'), INIT_SETTINGS);
-    if ((s.theme as string) === 'sunset') return { ...s, theme: 'dark', lastChainCheckMileage: s.lastChainCheckMileage || s.lastOilChangeMileage || 1350 };
-    if (!s.lastChainCheckMileage) return { ...s, lastChainCheckMileage: s.lastOilChangeMileage || 1350 };
-    return s;
+    return {
+      ...s,
+      theme: (s.theme as string) === 'sunset' ? 'dark' : (s.theme || 'dark'),
+      oilChangeInterval: s.oilChangeInterval || INIT_SETTINGS.oilChangeInterval,
+      filterChangeInterval: s.filterChangeInterval || INIT_SETTINGS.filterChangeInterval,
+      chainInterval: s.chainInterval || INIT_SETTINGS.chainInterval,
+      lastChainCheckMileage: s.lastChainCheckMileage || s.lastOilChangeMileage || INIT_SETTINGS.lastChainCheckMileage,
+    };
   },
-  setSettings: (d: AppSettings) => set(uk('settings'), d),
+  setSettings: (d: AppSettings) => { set(uk('settings'), d); scheduleSyncPush(); },
   patchSettings: (p: Partial<AppSettings>) => {
     const cur = get(uk('settings'), INIT_SETTINGS);
     set(uk('settings'), { ...cur, ...p });
+    scheduleSyncPush();
   },
 
   getDocuments: (): MotoDocument[] => get(uk('documents'), []),
-  setDocuments: (d: MotoDocument[]) => set(uk('documents'), d),
+  setDocuments: (d: MotoDocument[]) => { set(uk('documents'), d); scheduleSyncPush(); },
 
   getWishlist: (): WishlistItem[] => get(uk('wishlist'), []),
-  setWishlist: (d: WishlistItem[]) => set(uk('wishlist'), d),
+  setWishlist: (d: WishlistItem[]) => { set(uk('wishlist'), d); scheduleSyncPush(); },
 
   getTrips: (): TripLog[] => get(uk('trips'), []),
-  setTrips: (d: TripLog[]) => set(uk('trips'), d),
+  setTrips: (d: TripLog[]) => { set(uk('trips'), d); scheduleSyncPush(); },
 
   getChecklists: (): ChecklistRun[] => get(uk('checklists'), []),
-  setChecklists: (d: ChecklistRun[]) => set(uk('checklists'), d),
+  setChecklists: (d: ChecklistRun[]) => { set(uk('checklists'), d); scheduleSyncPush(); },
 
   getInsurance: (): InsuranceRecord | null => get(uk('insurance'), null),
-  setInsurance: (d: InsuranceRecord | null) => set(uk('insurance'), d),
+  setInsurance: (d: InsuranceRecord | null) => { set(uk('insurance'), d); scheduleSyncPush(); },
 
   clearAll: () => {
     if (typeof window === 'undefined') return;

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { pullFromCloud } from '@/lib/sync';
 
 function norm(p: string) { return p !== '/' ? p.replace(/\/$/, '') : '/'; }
 
@@ -30,7 +31,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setReady(true);
+    const syncKey = `xtz_sync_done_${session.userId}`;
+    if (!sessionStorage.getItem(syncKey)) {
+      sessionStorage.setItem(syncKey, '1');
+      pullFromCloud()
+        .catch(() => {})
+        .finally(() => setReady(true));
+    } else {
+      setReady(true);
+    }
   }, [path]);
 
   if (!ready) return (

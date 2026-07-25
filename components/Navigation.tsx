@@ -8,7 +8,7 @@ const TABS = [
   { href: '/', label: 'Painel', Icon: Home },
   { href: '/manutencao', label: 'Manutenção', Icon: Wrench },
   { href: '/combustivel', label: 'Combustível', Icon: Droplets },
-  { href: '/documentos', label: 'Documentos', Icon: FileText },
+  { href: '/documentos', label: 'Docs', Icon: FileText },
   { href: '/guia', label: 'Guia', Icon: BookOpen },
   { href: '/ajustes', label: 'Ajustes', Icon: Settings },
 ];
