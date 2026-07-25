@@ -14,19 +14,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
 
-  // Background sync: poll every 20s + on visibility change + on focus
+  // Background sync — poll every 10s, plus react to visibility/focus changes
   useEffect(() => {
-    const session = getSession();
-    if (!session) return;
-
     let active = true;
     let isFetching = false;
-    let lastPull = 0;
+    let lastFocusPull = 0;
 
     async function doPull() {
-      const now = Date.now();
-      if (!active || isFetching || now - lastPull < 10_000) return;
-      lastPull = now;
+      if (!active || isFetching) return;
       isFetching = true;
       try {
         const changed = await pullFromCloud();
@@ -35,24 +30,32 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       finally { isFetching = false; }
     }
 
-    const timer = setInterval(doPull, 20_000);
-
+    // On mobile: fires when user returns to the browser tab/app
     function onVisibilityChange() {
       if (document.visibilityState === 'visible') doPull();
     }
 
+    // On desktop: fires when window regains focus (small cooldown to avoid rapid clicks)
+    function onFocus() {
+      const now = Date.now();
+      if (now - lastFocusPull < 3_000) return;
+      lastFocusPull = now;
+      doPull();
+    }
+
+    const timer = setInterval(doPull, 5_000);
     document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('focus', doPull);
+    window.addEventListener('focus', onFocus);
 
     return () => {
       active = false;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', doPull);
+      window.removeEventListener('focus', onFocus);
     };
   }, []);
 
-  // Auth + initial sync
+  // Auth guard + initial sync (pulls server data before showing UI)
   useEffect(() => {
     const session = getSession();
 

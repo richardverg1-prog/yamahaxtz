@@ -38,8 +38,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    await kvExec(['SET', `xtz:${userId}`, JSON.stringify(body)]);
-    return NextResponse.json({ ok: true });
+    const syncedAt = new Date().toISOString(); // server clock is authoritative
+    await kvExec(['SET', `xtz:${userId}`, JSON.stringify({ ...body, _syncedAt: syncedAt })]);
+    return NextResponse.json({ ok: true, syncedAt });
   } catch {
     return NextResponse.json({ ok: false }, { status: 500 });
   }

@@ -37,8 +37,7 @@ export async function pushToCloud(): Promise<void> {
       try { data[k] = JSON.parse(v); } catch { /* skip corrupt key */ }
     }
   });
-  const syncedAt = new Date().toISOString();
-  data._syncedAt = syncedAt;
+  // _syncedAt is assigned by the server, not the client, to avoid clock-drift issues
 
   try {
     const res = await fetch('/api/sync', {
@@ -47,7 +46,10 @@ export async function pushToCloud(): Promise<void> {
       body: JSON.stringify(data),
     });
     if (res.ok) {
-      localStorage.setItem(lk(userId, '_syncedAt'), syncedAt);
+      const result = await res.json().catch(() => ({}));
+      if (result.syncedAt) {
+        localStorage.setItem(lk(userId, '_syncedAt'), result.syncedAt);
+      }
     }
   } catch { /* network errors are silent */ }
 }
