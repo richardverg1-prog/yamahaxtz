@@ -35,10 +35,12 @@ function computeNotifs(s: AppSettings): Notif[] {
   const lastChain = s.lastChainCheckMileage || s.lastOilChangeMileage;
   const chainLeft = (lastChain + s.chainInterval) - km;
   if (chainLeft <= 50) out.push({ id: 'chain', urgency: 'warn', icon: '⛓️', title: 'Corrente — verificar agora', detail: `Próxima em ${fmt(lastChain + s.chainInterval)} km (faltam ${fmt(chainLeft)} km)`, at_km: lastChain + s.chainInterval });
-  const sparkLeft = Math.ceil((km + 1) / 5000) * 5000 - km;
-  if (sparkLeft <= 500) out.push({ id: 'spark', urgency: 'warn', icon: '⚡', title: 'Vela — verificar/limpar', detail: `Faltam ${fmt(sparkLeft)} km`, at_km: km + sparkLeft });
-  const brakeNext = s.lastOilChangeMileage + 3000;
-  if (brakeNext <= km) out.push({ id: 'brake', urgency: 'warn', icon: '🔴', title: 'Freios — verificar pastilhas', detail: `Em ${fmt(brakeNext)} km (${fmt(km - brakeNext)} km atrás)`, at_km: brakeNext });
+  const lastSparkKm = s.lastSparkCheckMileage ?? 0;
+  const sparkLeft = (lastSparkKm + 5000) - km;
+  if (sparkLeft <= 500) out.push({ id: 'spark', urgency: 'warn', icon: '⚡', title: 'Vela — verificar/limpar', detail: `Faltam ${fmt(sparkLeft)} km`, at_km: lastSparkKm + 5000 });
+  const lastBrakeKmN = s.lastBrakeCheckMileage ?? s.lastOilChangeMileage;
+  const brakeNextN = lastBrakeKmN + 3000;
+  if (brakeNextN <= km) out.push({ id: 'brake', urgency: 'warn', icon: '🔴', title: 'Freios — verificar pastilhas', detail: `Em ${fmt(brakeNextN)} km (${fmt(km - brakeNextN)} km atrás)`, at_km: brakeNextN });
   const docs = storage.getDocuments();
   const today = new Date().toISOString().slice(0, 10);
   docs.forEach(doc => {
@@ -214,6 +216,10 @@ export default function Dashboard() {
   const [newWishPriority, setNewWishPriority] = useState<WishlistItem['priority']>('media');
   const [newWishPrice, setNewWishPrice] = useState('');
   const [newWishUrl, setNewWishUrl] = useState('');
+  const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [buyPrice, setBuyPrice] = useState('');
+  const [markDoneKey, setMarkDoneKey] = useState<string | null>(null);
+  const [markDoneKm, setMarkDoneKm] = useState('');
 
   function addWish() {
     if (!newWishDesc.trim()) return;
@@ -228,14 +234,32 @@ export default function Dashboard() {
     setShowAddWish(false); setNewWishDesc(''); setNewWishPrice(''); setNewWishUrl(''); setNewWishPriority('media');
   }
 
-  function toggleWishDone(id: string) {
-    const updated = wishlist.map(w => w.id === id ? { ...w, done: !w.done } : w);
+  function buyWish(id: string) {
+    const price = parseFloat(buyPrice) || wishlist.find(w => w.id === id)?.estimatedPrice || 0;
+    const today = new Date().toISOString().slice(0, 10);
+    const updated = wishlist.map(w => w.id === id ? { ...w, done: true, purchasedAt: today, actualPrice: price } : w);
     storage.setWishlist(updated); setWishlist(updated);
+    setBuyingId(null); setBuyPrice('');
   }
 
   function removeWish(id: string) {
     const updated = wishlist.filter(w => w.id !== id);
     storage.setWishlist(updated); setWishlist(updated);
+  }
+
+  function saveMaintDone(key: string) {
+    const v = parseInt(markDoneKm);
+    if (!v || v <= 0) return;
+    const fieldMap: Record<string, keyof AppSettings> = {
+      oil: 'lastOilChangeMileage', filter: 'lastFilterChangeMileage',
+      chain: 'lastChainCheckMileage', brake: 'lastBrakeCheckMileage',
+      spark: 'lastSparkCheckMileage', airfilter: 'lastAirFilterMileage',
+    };
+    const field = fieldMap[key];
+    if (!field) return;
+    const updated = { ...settings!, [field]: v } as AppSettings;
+    storage.setSettings(updated); setSettings(updated);
+    setMarkDoneKey(null); setMarkDoneKm('');
   }
 
   useEffect(() => {
@@ -264,16 +288,23 @@ export default function Dashboard() {
   const filterColor = filterPct >= 1 ? 'var(--danger)' : filterPct >= 0.8 ? 'var(--warn)' : 'var(--accent)';
 
   // Spark
-  const sparkNext = Math.ceil((km + 1) / 5000) * 5000;
-  const sparkLeft = sparkNext - km;
-  const sparkPct = Math.min(1, (5000 - sparkLeft) / 5000);
+  const lastSparkKm = settings.lastSparkCheckMileage ?? 0;
+  const nextSparkKm = lastSparkKm + 5000;
+  const sparkLeft = nextSparkKm - km;
+  const sparkPct = Math.min(1, (km - lastSparkKm) / 5000);
   const sparkColor = sparkLeft <= 500 ? 'var(--warn)' : 'var(--success)';
 
-  // Chain
+  // Air filter
+  const lastAirFilterKm = settings.lastAirFilterMileage ?? 0;
+  const nextAirFilterKm = lastAirFilterKm + 5000;
+  const airFilterLeft = nextAirFilterKm - km;
+
+  // Chain & brake
   const lastChainKm = settings.lastChainCheckMileage || settings.lastOilChangeMileage;
   const nextChainKm = lastChainKm + settings.chainInterval;
   const chainLeft = nextChainKm - km;
-  const brakeNext = settings.lastOilChangeMileage + 3000;
+  const lastBrakeKm = settings.lastBrakeCheckMileage ?? settings.lastOilChangeMileage;
+  const brakeNext = lastBrakeKm + 3000;
 
   // Fuel stats
   const validKmL = fuel.filter(f => f.kmL !== null && f.kmL! > 0);
@@ -287,12 +318,12 @@ export default function Dashboard() {
   const totalFuelCost = fuel.reduce((s, e) => s + e.totalCost, 0);
   const totalMultas = docs.filter(d => d.type === 'multa').reduce((s, d) => s + (d.amount ?? 0), 0);
   const totalSeguro = insurance?.payments.reduce((s, p) => s + p.amount, 0) ?? 0;
-  const totalInvested = totalMaintCost + totalFuelCost + totalMultas + totalSeguro;
+  const totalOperational = totalMaintCost + totalFuelCost + totalMultas + totalSeguro;
 
   const allMileages = [...maintenance.map(e => e.mileage), ...fuel.map(e => e.mileage)];
   const firstKm = allMileages.length > 0 ? Math.min(...allMileages) : km;
   const kmTracked = Math.max(0, km - firstKm);
-  const custoPorKm = kmTracked > 10 ? totalInvested / kmTracked : null;
+  const custoPorKm = kmTracked > 10 ? totalOperational / kmTracked : null;
 
   const notifs = computeNotifs(settings);
   const notifBadge = notifs.filter(n => n.urgency !== 'info').length;
@@ -311,12 +342,12 @@ export default function Dashboard() {
   }
 
   const schedule = [
-    { emoji: '⛓️', label: 'Corrente (verificar/lubrificar)', km: nextChainKm, left: chainLeft, badge: chainLeft <= 50 ? 'warn' : 'muted' as string },
-    { emoji: '🛢️', label: 'Troca de óleo', km: settings.lastOilChangeMileage + settings.oilChangeInterval, left: oilRemaining, badge: oilPct >= 1 ? 'danger' : oilPct >= 0.8 ? 'warn' : 'muted' as string },
-    { emoji: '🔵', label: 'Filtro de óleo', km: settings.lastFilterChangeMileage + settings.filterChangeInterval, left: filterRemaining, badge: filterPct >= 1 ? 'danger' : filterPct >= 0.8 ? 'warn' : 'muted' as string },
-    { emoji: '🔴', label: 'Freios (desgaste/nível DOT4)', km: brakeNext, left: brakeNext - km, badge: brakeNext <= km ? 'warn' : 'muted' as string },
-    { emoji: '⚡', label: 'Vela (verificar/limpar)', km: sparkNext, left: sparkLeft, badge: sparkLeft <= 500 ? 'warn' : 'muted' as string },
-    { emoji: '💨', label: 'Filtro de ar (limpar)', km: sparkNext, left: sparkLeft, badge: sparkLeft <= 500 ? 'warn' : 'muted' as string },
+    { key: 'chain', emoji: '⛓️', label: 'Corrente (verificar/lubrificar)', km: nextChainKm, left: chainLeft, badge: (chainLeft <= 0 ? 'danger' : chainLeft <= 50 ? 'warn' : 'muted') as string },
+    { key: 'oil', emoji: '🛢️', label: 'Troca de óleo', km: settings.lastOilChangeMileage + settings.oilChangeInterval, left: oilRemaining, badge: (oilPct >= 1 ? 'danger' : oilPct >= 0.8 ? 'warn' : 'muted') as string },
+    { key: 'filter', emoji: '🔵', label: 'Filtro de óleo', km: settings.lastFilterChangeMileage + settings.filterChangeInterval, left: filterRemaining, badge: (filterPct >= 1 ? 'danger' : filterPct >= 0.8 ? 'warn' : 'muted') as string },
+    { key: 'brake', emoji: '🔴', label: 'Freios (desgaste/nível DOT4)', km: brakeNext, left: brakeNext - km, badge: (brakeNext <= km ? 'warn' : 'muted') as string },
+    { key: 'spark', emoji: '⚡', label: 'Vela (verificar/limpar)', km: nextSparkKm, left: sparkLeft, badge: (sparkLeft <= 0 ? 'danger' : sparkLeft <= 500 ? 'warn' : 'muted') as string },
+    { key: 'airfilter', emoji: '💨', label: 'Filtro de ar (limpar)', km: nextAirFilterKm, left: airFilterLeft, badge: (airFilterLeft <= 0 ? 'danger' : airFilterLeft <= 500 ? 'warn' : 'muted') as string },
   ];
 
   const paidMultas = docs.filter(d => d.type === 'multa' && d.status === 'pago' && !!d.paymentDate);
@@ -327,10 +358,13 @@ export default function Dashboard() {
     ...(insurance?.payments ?? []).map(p => ({ id: p.id, date: p.paidAt.slice(0, 10), iconType: 'insurance' as const, title: `Seguro — ${fmtMonth(p.month)}`, subtitle: `Pago em ${fmtDate(p.paidAt.slice(0, 10))}`, amount: p.amount, href: '/documentos' })),
   ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
 
+  const totalWishPurchases = wishlist.filter(w => w.done && w.actualPrice !== undefined).reduce((s, w) => s + (w.actualPrice || 0), 0);
+  const totalInvested = totalOperational + totalWishPurchases;
   const gastosCategories = [
     { label: 'Manutenção', amount: totalMaintCost, color: 'var(--accent)' },
     { label: 'Combustível', amount: totalFuelCost, color: 'var(--success)' },
     { label: 'Seguros', amount: totalSeguro, color: 'var(--warn)' },
+    { label: 'Acessórios', amount: totalWishPurchases, color: '#8B5CF6' },
     { label: 'Multas', amount: totalMultas, color: 'var(--danger)' },
   ];
   const gastosTotal = gastosCategories.reduce((s, c) => s + c.amount, 0);
@@ -487,17 +521,38 @@ export default function Dashboard() {
             <div className="card" style={{ marginBottom: 14 }}>
               <div className="card-pad">
                 <div className="card-title">Próximas manutenções</div>
-                {schedule.map((item, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < schedule.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <span style={{ fontSize: 16, flexShrink: 0, width: 24, textAlign: 'center' }}>{item.emoji}</span>
-                    <span style={{ flex: 1, fontSize: 13 }}>{item.label}</span>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <span className={`badge badge-${item.badge}`}>{fmt(item.km)} km</span>
-                      {item.left > 0 && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>faltam {fmt(item.left)} km</div>}
-                      {item.left <= 0 && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>vencida</div>}
+                {schedule.map((item, i) => {
+                  const isMarking = markDoneKey === item.key;
+                  return (
+                    <div key={i} style={{ padding: '9px 0', borderBottom: i < schedule.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 16, flexShrink: 0, width: 24, textAlign: 'center' }}>{item.emoji}</span>
+                        <span style={{ flex: 1, fontSize: 13 }}>{item.label}</span>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <span className={`badge badge-${item.badge}`}>{fmt(item.km)} km</span>
+                          {item.left > 0 && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>faltam {fmt(item.left)} km</div>}
+                          {item.left <= 0 && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>vencida</div>}
+                        </div>
+                        <button onClick={() => { setMarkDoneKey(isMarking ? null : item.key); setMarkDoneKm(String(km)); }}
+                          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--muted)', fontSize: 11, fontWeight: 600, padding: '4px 7px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <Check size={11} /> Feito
+                        </button>
+                      </div>
+                      {isMarking && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, paddingLeft: 34 }}>
+                          <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>Em</span>
+                          <input className="form-input" type="number" placeholder="km" value={markDoneKm}
+                            onChange={e => setMarkDoneKm(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && saveMaintDone(item.key)} autoFocus
+                            style={{ width: 90, padding: '5px 8px', fontSize: 13 }} />
+                          <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>km</span>
+                          <button className="btn btn-primary btn-sm" onClick={() => saveMaintDone(item.key)} style={{ gap: 4 }}><Check size={12} /> Salvar</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setMarkDoneKey(null); setMarkDoneKm(''); }}><X size={12} /></button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -520,28 +575,52 @@ export default function Dashboard() {
                     Nenhum item ainda
                   </div>
                 )}
-                {wishlist.map((item, i) => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < wishlist.length - 1 ? '1px solid var(--border)' : 'none', opacity: item.done ? 0.5 : 1 }}>
-                    <button onClick={() => toggleWishDone(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2 }}>
-                      <ShoppingBag size={17} style={{ color: item.done ? 'var(--success)' : 'var(--muted)' }} />
-                    </button>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, textDecoration: item.done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                        <span className={`badge badge-${item.priority === 'alta' ? 'danger' : item.priority === 'media' ? 'warn' : 'muted'}`}>{item.priority}</span>
-                        {item.estimatedPrice > 0 && <span style={{ fontSize: 11, color: 'var(--muted)' }}>~{fmtR(item.estimatedPrice)}</span>}
-                        {item.url && (
-                          <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 2, textDecoration: 'none' }}>
-                            <ExternalLink size={10} /> ver
-                          </a>
+                {wishlist.map((item, i) => {
+                  const isBuying = buyingId === item.id;
+                  return (
+                    <div key={item.id} style={{ padding: '10px 0', borderBottom: i < wishlist.length - 1 ? '1px solid var(--border)' : 'none', opacity: item.done ? 0.65 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, textDecoration: item.done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            {item.done && <Check size={13} style={{ color: 'var(--success)', flexShrink: 0 }} />}
+                            {item.description}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+                            {!item.done && <span className={`badge badge-${item.priority === 'alta' ? 'danger' : item.priority === 'media' ? 'warn' : 'muted'}`}>{item.priority}</span>}
+                            {!item.done && item.estimatedPrice > 0 && <span style={{ fontSize: 11, color: 'var(--muted)' }}>~{fmtR(item.estimatedPrice)}</span>}
+                            {item.done && item.purchasedAt && <span style={{ fontSize: 11, color: 'var(--success)' }}>Comprado {fmtDate(item.purchasedAt)}</span>}
+                            {item.done && item.actualPrice !== undefined && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtR(item.actualPrice)}</span>}
+                            {!item.done && item.url && (
+                              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 2, textDecoration: 'none' }}>
+                                <ExternalLink size={10} /> ver
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        {!item.done && (
+                          <button onClick={() => { setBuyingId(isBuying ? null : item.id); setBuyPrice(item.estimatedPrice > 0 ? String(item.estimatedPrice) : ''); }}
+                            style={{ background: 'none', border: `1px solid ${isBuying ? 'var(--accent)' : 'var(--success)'}`, borderRadius: 8, cursor: 'pointer', color: isBuying ? 'var(--accent)' : 'var(--success)', fontSize: 12, fontWeight: 700, padding: '4px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <ShoppingBag size={12} /> Comprado
+                          </button>
                         )}
+                        <button onClick={() => removeWish(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, flexShrink: 0 }}>
+                          <Trash2 size={14} />
+                        </button>
                       </div>
+                      {isBuying && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>R$</span>
+                          <input className="form-input" type="number" placeholder="Valor pago" value={buyPrice}
+                            onChange={e => setBuyPrice(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && buyWish(item.id)} autoFocus
+                            style={{ flex: 1, padding: '5px 8px', fontSize: 13 }} />
+                          <button className="btn btn-primary btn-sm" onClick={() => buyWish(item.id)} style={{ gap: 4, flexShrink: 0 }}><Check size={13} /> OK</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setBuyingId(null); setBuyPrice(''); }} style={{ flexShrink: 0 }}><X size={13} /></button>
+                        </div>
+                      )}
                     </div>
-                    <button onClick={() => removeWish(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, flexShrink: 0 }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {/* Add form */}
                 {showAddWish ? (

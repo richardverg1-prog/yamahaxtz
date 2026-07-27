@@ -92,6 +92,8 @@ export interface WishlistItem {
   estimatedPrice: number;
   url?: string;
   done: boolean;
+  purchasedAt?: string;
+  actualPrice?: number;
 }
 
 export interface TripLog {
@@ -123,6 +125,9 @@ export interface AppSettings {
   bikeColor: string;
   anthropicApiKey?: string;
   tires?: { dianteiro?: TireEntry; traseiro?: TireEntry };
+  lastSparkCheckMileage?: number;
+  lastAirFilterMileage?: number;
+  lastBrakeCheckMileage?: number;
 }
 
 export interface User {
